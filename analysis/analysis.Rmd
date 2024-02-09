@@ -1,0 +1,1243 @@
+---
+title: "Statistical analysis"
+author: "JH, CS"
+date: "2024-02-09"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+opts_chunk$set(tidy = FALSE)
+options(width = 120)
+```
+
+# 1. Software versions
+
+## 1.1. R version
+```{r}
+version
+```
+
+## 1.2. Package versions
+```{r}
+library(tidyverse)
+packageVersion("tidyverse")
+```
+
+```{r}
+library(readxl)
+packageVersion("readxl")
+```
+
+```{r}
+library(crosstable)
+packageVersion("crosstable")
+```
+
+```{r}
+library(reshape2)
+packageVersion("reshape2")
+```
+
+```{r}
+library(Hmisc)
+packageVersion("Hmisc")
+```
+
+```{r}
+library(nortest)
+packageVersion("nortest")
+```
+
+```{r}
+library(ggpubr)
+packageVersion("ggpubr")
+```
+
+```{r}
+library(rcompanion)
+packageVersion("rcompanion")
+```
+
+# 2. Plot aesthetics
+```{r include=TRUE}
+pie_theme <- theme_minimal() +
+  theme(
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    panel.border = element_blank(),
+    panel.grid=element_blank(),
+    axis.ticks = element_blank(),
+    plot.title=element_text(size=14, face="bold")
+  ) +
+  theme(axis.text.x=element_blank())
+
+plot_theme<- theme_minimal() +
+  theme(
+    panel.background = element_blank(),
+    panel.grid = element_blank(),
+    axis.line = element_line(colour="black", linewidth=.75),
+    axis.ticks = element_line(colour="black", linewidth=.75),
+    axis.text = element_text(size=10, face="bold"),
+    axis.title = element_text(size=12, face="bold"),
+    legend.text = element_text(size=10, face="bold"),
+    legend.title = element_text(size=12, face="bold")
+  )
+```
+
+# 3. Data import
+```{r}
+exceldata <- read_excel("results-survey.xlsx")                          
+Data_Tabl<- data.frame(exceldata)
+```
+
+## 3.1. Data cleaning & overview
+
+### 3.1.1. Standardization of row names and value language
+```{r}
+colnames(Data_Tabl) <- c(
+     "lastpage",
+     "Image_seen_before",
+     "Age",
+     "Gender",
+     "F15003",
+     "F03004",
+     "B001",
+     "B003",
+     "F03002",
+     "B002",
+     "B004",
+     "F15004",
+     "F03003",
+     "F03001",
+     "B005",
+     "F15001",
+     "B006",
+     "F15002",
+     "B007",
+     "B008",
+     "interviewtime",
+     "grouptime_general_questions",
+     "E001_time",
+     "E002_time",
+     "E003_time",
+     "grouptime_image_classification",
+     "F15003_time",
+     "F03004_time",
+     "B001_time",
+     "B003_time",
+     "F03002_time",
+     "B002_time",
+     "B004_time",
+     "F15004_time",
+     "F03003_time",
+     "F03001_time",
+     "B005_time",
+     "F15001_time",
+     "B006_time",
+     "F15002_time",
+     "B007_time",
+     "B008_time"
+     )
+
+# translate text values to English
+Data_Tabl$Image_seen_before <- 
+  dplyr::recode(Data_Tabl$Image_seen_before, ja="yes", nein="no")
+Data_Tabl$Gender <- 
+  dplyr::recode(Data_Tabl$Gender, männlich="male", weiblich="female")
+
+Data_Tabl <- Data_Tabl %>%
+  dplyr::mutate(across(c(F15003,F03004,F03002,F15004,F03003,F03001,F15001,F15002,B001,B003,B002,B004,B005,B006,B007,B008), \(x) dplyr::recode(x,"KI-generiert"="AI-generated", "Echt"="genuine")))
+
+Data_Tabl$ID <- 1:nrow(Data_Tabl)
+```
+
+### 3.1.2. Remove survey test runs
+```{r}
+# drop survey test runs
+Data_Tabl <- Data_Tabl[Data_Tabl$Age != "test",]
+```
+
+### 3.1.3. Study completion
+```{r}
+# participants who just opened study without answering any question
+Data_Tabl$lastpage[is.na(Data_Tabl$lastpage)] <- 0
+
+# plot overview
+histCompletion <- ggplot(Data_Tabl, aes(x=lastpage)) +
+  geom_histogram(binwidth=1) +
+  xlab("Last answered question") +
+  ylab("Participant count")
+
+histCompletion
+```
+
+##### Remove participants who didn't complete the study
+Number of participants starting the study
+```{r}
+n_all <- nrow(Data_Tabl)
+n_all
+```
+
+Number of participants finishing the study
+```{r}
+Data_Tabl <- Data_Tabl[Data_Tabl$lastpage == 19,]
+n_complete <- nrow(Data_Tabl)
+n_complete
+```
+Percent completed
+```{r}
+p_complete <- n_complete/n_all*100
+p_complete
+```
+## 3.2. Demographics
+
+##### Age
+```{r}
+# convert age to integer
+Data_Tabl$Age <- Data_Tabl$Age %>% strtoi()
+
+# mark nonsense age entries
+Data_Tabl$Age[Data_Tabl$Age>110] = NA
+
+# plot overview
+histAge <- ggplot(Data_Tabl, aes(x=Age)) +
+  geom_histogram(binwidth = 1)
+
+histAge
+```
+
+
+##### Gender <> Prior experience
+```{R}
+gender <- as.data.frame(table(addNA(Data_Tabl$Image_seen_before),addNA(Data_Tabl$Gender)))
+colnames(gender) <- c("Group", "Gender", "Frequency")
+
+
+ggplot(gender, aes(x = Group, y = Frequency, fill=Gender)) +
+  geom_bar(stat = "identity", position = "dodge") +
+  labs(title = "Participants by Gender",
+       x = "Histological image seen before",
+       y = "Frequency",
+       fill = "Gender") 
+```
+
+##### Gender <> Prior experience
+```{r}
+crosstable(Data_Tabl, c(Image_seen_before), by=c(Gender), funs=c(sum)) %>% 
+  as_flextable(keep_id=TRUE)
+```
+
+##### Age <> Prior experience
+```{r}
+ggplot(Data_Tabl, aes(x = Age), na.rm = TRUE) +
+  geom_histogram(binwidth = 5, fill = "darkblue", color="grey", na.rm = TRUE) +
+  facet_wrap(~ Image_seen_before) +
+  labs(title = "Participants by age having vs. not having seen histological image before",
+       x = "Age",
+       y = "Frequency",
+       fill = "Histological image seen before") +
+    scale_fill_brewer(palette="Set1")
+```
+
+##### Age <> Prior experience
+```{r}
+crosstable(drop_na(Data_Tabl, Age), c(Age), by=c(Image_seen_before), funs=c(median, mean, "std dev"=sd)) %>% as_flextable(keep_id=TRUE)
+```
+
+##### Prior experience
+```{r}
+n_participants_experience <- table(addNA(Data_Tabl$Image_seen_before))
+p_participants_experience <- n_participants_experience / length(Data_Tabl$Image_seen_before) *100
+
+expTable <- rbind(n_participants_experience, p_participants_experience)
+colnames(expTable) <- c("naive", "expert", "NaN")
+rownames(expTable) <- c("count", "percent")
+
+expTable
+```
+
+## 3.3. Handling datasets containing missing values ('NA')
+
+### 3.3.1. Missing values for classification duration
+Replace duration data with NA in cases where an image has not been classified.
+```{r}
+Data_Tabl$B001_time[is.na(Data_Tabl$B001)]<-NA
+Data_Tabl$B002_time[is.na(Data_Tabl$B002)]<-NA
+Data_Tabl$B003_time[is.na(Data_Tabl$B003)]<-NA
+Data_Tabl$B004_time[is.na(Data_Tabl$B004)]<-NA
+Data_Tabl$B005_time[is.na(Data_Tabl$B005)]<-NA
+Data_Tabl$B006_time[is.na(Data_Tabl$B006)]<-NA
+Data_Tabl$B007_time[is.na(Data_Tabl$B007)]<-NA
+Data_Tabl$B008_time[is.na(Data_Tabl$B008)]<-NA
+Data_Tabl$F03001_time[is.na(Data_Tabl$F03001)]<-NA
+Data_Tabl$F03002_time[is.na(Data_Tabl$F03002)]<-NA
+Data_Tabl$F03003_time[is.na(Data_Tabl$F03003)]<-NA
+Data_Tabl$F03004_time[is.na(Data_Tabl$F03004)]<-NA
+Data_Tabl$F15001_time[is.na(Data_Tabl$F15001)]<-NA
+Data_Tabl$F15002_time[is.na(Data_Tabl$F15002)]<-NA
+Data_Tabl$F15003_time[is.na(Data_Tabl$F15003)]<-NA
+Data_Tabl$F15004_time[is.na(Data_Tabl$F15004)]<-NA
+```
+
+### 3.3.2. Missing values for prior experience
+Preparation of the analysis table: Assignment of lines answering NA to the question E001 ("Image_seen_before").
+
+Rationale: Those who did not know histological images are likely to even not knowing the term and, therefore might have answered NA.
+```{r}
+Data_Tabl$Image_seen_before[is.na(Data_Tabl$Image_seen_before)]<-"no"
+
+n_participants_experience_noNA <- table(addNA(Data_Tabl$Image_seen_before))
+p_participants_experience_noNA <- n_participants_experience_noNA / length(Data_Tabl$Image_seen_before)
+
+expTable_noNA <- rbind(n_participants_experience_noNA, p_participants_experience_noNA)
+colnames(expTable_noNA) <- c("naive", "expert", "nan")
+rownames(expTable_noNA) <- c("n", "p")
+
+n_naive <- expTable_noNA[1,1]
+n_expert <- expTable_noNA[1,2]
+expTable_noNA
+```
+
+### 3.3.3. Missing values for classifications
+Skipped answers during classification are considered "misclassified", i.e. 
+* for artificial images 'genuine' replaces 'NA'
+* for genuine images 'AI-generated' replaces 'NA'
+
+##### Percent of non-classified images (i.e. skipped images in survey)
+```{R}
+na_entries_count <- sum(is.na(Data_Tabl$B001)) +
+                    sum(is.na(Data_Tabl$B002)) +
+                    sum(is.na(Data_Tabl$B003)) +
+                    sum(is.na(Data_Tabl$B004)) +
+                    sum(is.na(Data_Tabl$B005)) +
+                    sum(is.na(Data_Tabl$B006)) +
+                    sum(is.na(Data_Tabl$B007)) +
+                    sum(is.na(Data_Tabl$B008)) +
+                    sum(is.na(Data_Tabl$F03001)) +
+                    sum(is.na(Data_Tabl$F03002)) +
+                    sum(is.na(Data_Tabl$F03003)) +
+                    sum(is.na(Data_Tabl$F03004)) +
+                    sum(is.na(Data_Tabl$F15001)) +
+                    sum(is.na(Data_Tabl$F15002)) +
+                    sum(is.na(Data_Tabl$F15003)) +
+                    sum(is.na(Data_Tabl$F15004))
+
+entries_total <- nrow(Data_Tabl)*16
+percent_na <- na_entries_count/entries_total*100
+percent_na
+```
+
+##### Relabel non-classified images as misclassified
+```{r}
+Data_Tabl <- Data_Tabl %>%
+  mutate_at(vars(F15003,F03004,F03002,F15004,F03003,F03001,F15001,F15002), ~ifelse(is.na(.), "genuine", .))
+  
+Data_Tabl <- Data_Tabl %>%
+  mutate_at(vars(B001,B003,B002,B004,B005,B006,B007,B008), ~ifelse(is.na(.), "AI-generated", .))
+```
+
+##### Re-calculate age after treatment of missing values
+```{r}
+crosstable(drop_na(Data_Tabl, Age), c(Age), by=c(Image_seen_before), funs=c(median, mean, "std dev"=sd)) %>% as_flextable(keep_id=TRUE)
+```
+
+### 3.3.4. Missing values for gender
+Replacing 'NA' entries in the gender column with 'unknown'
+```{r}
+Data_Tabl$Gender[is.na(Data_Tabl$Gender)]<-"unknown"
+```
+
+## 3.4. Format data
+
+##### melt()
+```{r}
+classificationLong_response <- melt(Data_Tabl[,c(2:20, 43)], id = c("ID", "Image_seen_before", "Age", "Gender"))
+classificationLong_time <- melt(Data_Tabl[,c(2:4, 27:43)], id = c("ID", "Image_seen_before", "Age", "Gender"))
+imageClassificationDataLong <- cbind(classificationLong_response, classificationLong_time$value)
+colnames(imageClassificationDataLong)[7] <- "time"
+```
+
+##### Add columns: generation, trainingBase, response, stimNo
+```{r}
+# generation: ground truth identity: artificial vs. genuine
+imageClassificationDataLong$variable <- as.character(imageClassificationDataLong$variable)
+imageClassificationDataLong <- imageClassificationDataLong %>%
+  mutate(
+    generation = case_when(
+      startsWith(variable,"F") ~ "AI-generated",
+      startsWith(variable,"B") ~ "genuine"
+    )
+  )
+
+# trainingBase: ground truth identity: genuine (B0), trained using 3 (F3), trained using 15 F(15) genuine samples
+imageClassificationDataLong <- imageClassificationDataLong %>%
+  mutate(
+    trainingBase = case_when(
+      startsWith(variable,"F15") ~ "F15",
+      startsWith(variable,"F03") ~ "F3",
+      startsWith(variable,"B") ~ "B0"
+    )
+  )
+
+# response: correct vs. incorrect classification
+imageClassificationDataLong <- imageClassificationDataLong %>%
+  mutate(
+    response = case_when(
+      value == generation ~ "correct",
+      value != generation ~ "incorrect"
+    )
+  )
+
+# response_i: same as response, but as integer
+imageClassificationDataLong <- imageClassificationDataLong %>%
+  mutate(
+    response_i = case_when(
+      value == generation ~ 1,
+      value != generation ~ 0
+    )
+  )
+
+# stimNo: number of stimulus in presentation during study
+imageClassificationDataLong <- imageClassificationDataLong %>%
+  mutate(
+    stimNo = case_when(
+      variable == "F15003" ~ 1,              
+      variable == "F03004" ~ 2,
+      variable == "B001" ~ 3,
+      variable == "B003" ~4,
+      variable == "F03002" ~ 5,
+      variable == "B002" ~ 6,
+      variable == "B004" ~ 7,
+      variable == "F15004" ~ 8,
+      variable == "F03003" ~ 9,
+      variable == "F03001" ~ 10,
+      variable == "B005" ~ 11,
+      variable == "F15001" ~ 12,
+      variable == "B006" ~ 13,
+      variable == "F15002" ~ 14,
+      variable == "B007" ~ 15,
+      variable == "B008" ~ 16
+    )
+  )
+
+```
+
+# 4. Analysis of classification performance
+
+## 4.1.  Analysis of the distinguishability of artificial vs. genuine images
+Guiding question: Can the real images be well distinguished from the generated ones?
+
+### 4.1.1. Format data
+```{r}
+tbl_a = table(imageClassificationDataLong[,c("generation","value")])
+tbl_a <- addmargins(tbl_a)
+tbl_a
+```
+
+### 4.1.2. F1 Score
+```{r}
+TP <- tbl_a["AI-generated", "AI-generated"]
+FN <- tbl_a["AI-generated", "genuine"]
+FP <- tbl_a["genuine", "AI-generated"]
+TN <- tbl_a["genuine", "genuine"]
+
+precision <- TP/(TP+FP)
+sens <- TP/(TP+FN)
+
+F1_score <- 2/(1/precision + 1/sens) 
+F1_score
+```
+
+## 4.2. Confidence intervals
+
+### 4.2.1. Naive participants
+```{r}
+# gather data for naives
+dat_unexperienced <- filter(imageClassificationDataLong,Image_seen_before=="no")
+
+tbl_SensSpec_n = table(dat_unexperienced[,c("generation","value")])
+tbl_SensSpec_n <- addmargins(tbl_SensSpec_n)
+
+TP_n <- tbl_SensSpec_n["AI-generated", "AI-generated"]
+FN_n <- tbl_SensSpec_n["AI-generated", "genuine"]
+FP_n <- tbl_SensSpec_n["genuine", "AI-generated"]
+TN_n <- tbl_SensSpec_n["genuine", "genuine"]
+
+
+# Sensitivity + specificity: Confidence intervals  using the Wilson Score Interval.
+allpos <- TP_n + FN_n
+allneg <- TN_n + FP_n
+
+sensitivity_ci_n <- binconf(TP_n,allpos,method="wilson")
+specificity_ci_n <- binconf(TN_n,allneg,method="wilson")
+```
+
+```{r}
+tbl_SensSpec_n
+```
+
+```{r}
+print("Sensitivity Confidence Interval:")
+print(sensitivity_ci_n)
+```
+
+```{r}
+print("Specificity Confidence Interval:")
+print(specificity_ci_n)
+```
+
+### 4.2.2. Expert participants
+```{r}
+# gather data for expert participants
+dat_unexperienced <- filter(imageClassificationDataLong,Image_seen_before=="yes")
+
+tbl_SensSpec_e = table(dat_unexperienced[,c("generation","value")])
+tbl_SensSpec_e <- addmargins(tbl_SensSpec_e)
+
+TP_e <- tbl_SensSpec_e["AI-generated", "AI-generated"]
+FN_e <- tbl_SensSpec_e["AI-generated", "genuine"]
+FP_e <- tbl_SensSpec_e["genuine", "AI-generated"]
+TN_e <- tbl_SensSpec_e["genuine", "genuine"]
+
+
+# Sensitivity + specificity: Confidence intervals  using the Wilson Score Interval.
+allpos_e <- TP_e + FN_e
+allneg_e <- TN_e + FP_e
+
+sensitivity_ci_e <- binconf(TP_e,allpos_e,method="wilson")
+specificity_ci_e <- binconf(TN_e,allneg_e,method="wilson")
+```
+
+```{r}
+tbl_SensSpec_e
+```
+
+```{r}
+print("Sensitivity Confidence Interval:")
+print(sensitivity_ci_e)
+```
+
+```{r}
+print("Specificity Confidence Interval:")
+print(specificity_ci_e)
+```
+
+### 4.2.3. Plot results
+```{r}
+df_sensSpec <- data.frame(
+  subject = c("naive", 
+              "naive", 
+              "expert", 
+              "expert"),
+  measure = c("Sens", 
+              "Spec", 
+              "Sens", 
+              "Spec"),
+  estimate = c(sensitivity_ci_n[1], 
+               specificity_ci_n[1], 
+               sensitivity_ci_e[1], 
+               specificity_ci_e[1]),
+  CI_lower = c(sensitivity_ci_n[2], 
+               specificity_ci_n[2], 
+               sensitivity_ci_e[2], 
+               specificity_ci_e[2]),
+  CI_upper = c(sensitivity_ci_n[3], 
+               specificity_ci_n[3], 
+               sensitivity_ci_e[3], 
+               specificity_ci_e[3])
+  )
+
+ggplot(df_sensSpec, aes(x=subject, y=estimate, colour=measure, fill=measure)) +
+  geom_point(position=position_dodge(0.185), size=5, shape=16) +
+  geom_errorbar(aes(ymin = CI_lower, ymax = CI_upper), width=0, size=1, position=position_dodge(0.185)) +
+  scale_color_manual(values =  c("#16d108", "#0756de")) +
+  labs(y= "Respones [%]", x = "") +
+  plot_theme
+```
+
+## 4.3. Overall performance 
+
+### 4.3.1. Naive participants
+
+##### Numbers
+```{r}
+n_correct <- TP_n+TN_n
+n_correct
+
+n_incorrect <- FP_n+FN_n
+n_incorrect
+
+p_correct <- (TP_n+TN_n) / (TP_n+TN_n+FP_n+FN_n) *100
+p_correct
+
+p_incorrect <- (FP_n+FN_n) / (TP_n+TN_n+FP_n+FN_n) *100
+p_incorrect
+```
+
+##### Pie chart proportions
+```{r}
+# pie chart
+df_n_all <- data.frame(
+  group = c("Correct", "False"),
+  value = c(TP_n+TN_n, FP_n+FN_n)
+)
+
+df_n_all$value <- df_n_all$value / sum(df_n_all$value) * 100
+
+bp_n_all <- ggplot(df_n_all, aes(x="", y=value, fill=group)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar("y", start=0) + 
+  pie_theme +
+  scale_fill_manual(values = c("#03c7ff", "#fc7303"))
+
+bp_n_all
+
+```
+
+##### Statistics vs. chance
+Binomial exact test: Performance significantly better than chance
+```{r}
+binom_n <- binom.test(TP_n+TN_n, TP_n+TN_n+FP_n+FN_n, p = 0.5,
+                       alternative = c("two.sided", "less", "greater"),
+                       conf.level = 0.95)
+
+binom_n
+```
+
+##### Performance genuine vs. artificial
+Performance naive - genuine:
+```{r}
+n_correct <- TN_n
+n_correct
+
+n_incorrect <- FP_n
+n_incorrect
+
+p_correct <- (TN_n) / (TN_n+FP_n) *100
+p_correct
+
+p_incorrect <- (FP_n) / (FP_n+TN_n) *100
+p_incorrect
+```
+
+Performance naive - artificial:
+```{r}
+n_correct <- TP_n
+n_correct
+
+n_incorrect <- FN_n
+n_incorrect
+
+p_correct <- (TP_n) / (TP_n+FN_n) *100
+p_correct
+
+p_incorrect <- (FN_n) / (TP_n+FN_n) *100
+p_incorrect
+```
+
+Chi2 test: No statistical difference for performance of naive participants between image categories.
+```{r}
+correct_n <- c(TP_n, TN_n)
+incorrect_n <- c(FP_n, FN_n)
+
+cnttab_n <- matrix(c(correct_n, incorrect_n), ncol=2)
+rownames(cnttab_n) <- c("Artificial", "Genuine")
+colnames(cnttab_n) <- c("Correct", "False")
+chi2_n <- chisq.test(cnttab_n)
+print(cnttab_n)
+print(chi2_n)
+```
+
+### 4.3.2. Expert participants
+
+##### Numbers
+```{r}
+n_correct <- TP_e+TN_e
+n_correct
+
+n_incorrect <- FP_e+FN_e
+n_incorrect
+
+p_correct <- (TP_e+TN_e) / (TP_e+TN_e+FP_e+FN_e) *100
+p_correct
+
+p_incorrect <- (FP_e+FN_e) / (TP_e+TN_e+FP_e+FN_e) *100
+p_incorrect
+```
+
+##### Pie chart proportions
+```{r}
+df_e_all <- data.frame(
+  group = c("Correct", "False"),
+  value = c(TP_e+TN_e, FP_e+FN_e)
+)
+
+df_e_all$value <- df_e_all$value / sum(df_e_all$value) * 100
+
+bp_e_all <- ggplot(df_e_all, aes(x="", y=value, fill=group)) +
+  geom_bar(width=1, stat="identity") +
+  coord_polar("y", start=0) + 
+  pie_theme +
+  scale_fill_manual(values = c("#03c7ff", "#fc7303"))
+
+bp_e_all
+```
+
+##### Statistics vs. naive participants
+Experts perform statistically significantly better than naive participants.
+```{r}
+exprcd <- c((TP_e+TN_e),(FN_e+FP_e))
+unexprcd <- c((TP_n+TN_n),(FN_n+FP_n))
+
+cnttab <- matrix(c(exprcd,unexprcd), nrow = 2)
+rownames(cnttab) <- c("Experienced", "Unexperienced")
+colnames(cnttab) <- c("Correct", "Incorrect")
+
+chi_quadrat_test <- chisq.test(cnttab)
+
+print(cnttab)
+print(chi_quadrat_test)
+```
+##### Performance genuine vs. artificial
+Performance expert - genuine:
+```{r}
+n_correct <- TN_e
+n_correct
+
+n_incorrect <- FP_e
+n_incorrect
+
+p_correct <- (TN_e) / (TN_e+FP_e) *100
+p_correct
+
+p_incorrect <- (FP_e) / (FP_e+TN_e) *100
+p_incorrect
+```
+
+Performance expert - artificial:
+```{r}
+n_correct <- TP_e
+n_correct
+
+n_incorrect <- FN_e
+n_incorrect
+
+p_correct <- (TP_e) / (TP_e+FN_e) *100
+p_correct
+
+p_incorrect <- (FN_e) / (TP_e+FN_e) *100
+p_incorrect
+```
+Chi2 test: No statistical difference for performance of expert participants between image categories.
+```{r}
+correct_e <- c(TP_e, TN_e)
+incorrect_e <- c(FP_e, FN_e)
+
+cnttab_e <- matrix(c(correct_e, incorrect_e), ncol=2)
+rownames(cnttab_e) <- c("Artificial", "Genuine")
+colnames(cnttab_e) <- c("Correct", "False")
+chi2_e <- chisq.test(cnttab_e)
+print(cnttab_e)
+print(chi2_e)
+```
+
+## 4.4. Performance by image category
+
+### 4.4.1. Bar plot proportions
+```{r}
+imageDataCast <- dcast(imageClassificationDataLong, trainingBase + Image_seen_before ~ response, length)
+imageDataCast$pCorrect <- imageDataCast$correct / (imageDataCast$correct + imageDataCast$incorrect)
+
+bp_sup <- ggplot(imageDataCast, aes(x=Image_seen_before, y=pCorrect*100, fill=fct_reorder(trainingBase, c(5,1,3,6,2,4)))) +
+  geom_bar(width=0.9, stat="identity", position="dodge") +
+    scale_fill_manual(values = c("#0c1ff0", "#00ff00", "#0de609")) +
+  labs(y= "Correct respones [%]", x = "") +
+  ylim(0, 100) + 
+  plot_theme
+
+bp_sup
+```
+
+### 4.4.2. Statistics: Binomial regression
+
+##### Model
+```{r}
+model <- glm(factor(response_i) ~ Image_seen_before * trainingBase,
+            data=imageClassificationDataLong,
+            family="binomial")
+summary(model)
+```
+
+##### Estimate + confidence intervals
+```{r}
+as.data.frame(cbind(coef(model), confint(model)))
+```
+
+##### Odds ratio + confidence intervals
+```{r}
+OR_vals <- as.data.frame(exp(cbind(coef(model), confint(model))))
+OR_vals
+```
+
+##### Plot results
+```{r}
+OR_vals$no <- c(1:6)
+colnames(OR_vals) <- c("pnt", "lower", "upper", "no")
+
+ggplot(OR_vals, aes(y=pnt, x=factor(no))) +
+  geom_point(position=position_dodge(0.185), size=5, shape=16) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width=0, size=1, position=position_dodge(0.185)) +
+  labs(y= "OR + 95% CI", x = "") +
+  scale_x_discrete(labels=c(rownames(OR_vals))) +
+  plot_theme +
+  theme(axis.text.x = element_text(angle=90)) +
+  geom_hline(yintercept=1)
+```
+
+## 4.5. Participant-wise performance
+
+##### Remove images without response
+```{r}
+nrow(imageClassificationDataLong)
+imageClassificationDataLong_2 <- imageClassificationDataLong %>% drop_na(time)
+nrow(imageClassificationDataLong_2)
+```
+
+### 4.5.1. Format data
+```{r}
+# preallocate
+paticipant_data_length <- length(unique(imageClassificationDataLong_2$ID))
+participant_data <- data.frame(no=rep(NA,paticipant_data_length),
+                               id=rep(NA,paticipant_data_length),
+                               experience=rep(NA,paticipant_data_length),
+                               mean_response=rep(NA,paticipant_data_length))
+
+
+counter = 1
+for(x in unique(imageClassificationDataLong_2$ID)){
+      tmp_data <- imageClassificationDataLong_2 %>% subset(ID == x)
+      participant_data$no[counter] <- counter
+      participant_data$id[counter] <- tmp_data$ID[1]
+      participant_data$experience[counter] <- tmp_data$Image_seen_before[1]
+      participant_data$mean_response[counter] <- mean(tmp_data$response_i)
+      counter = counter + 1
+}
+
+```
+
+### 4.5.2. Plot results as cumulative plot
+```{r}
+ggplot(participant_data, aes(linetype=experience, color=experience, x=mean_response)) +
+  stat_ecdf(size=0.75) +
+  plot_theme +
+  xlab("Participant-wise performance [% correct]") +
+  scale_linetype_manual(values=c("longdash", "solid"))+
+  scale_color_manual(values=c("black", "#858382")) +
+  ylab("CDF") +
+  ylim(-0.01, 1.01) + xlim(-0.01, 1.01)
+
+```
+
+### 4.5.3. Plot results as boxplot
+```{r}
+ggplot(participant_data, aes(fill=experience, y=mean_response)) +
+  geom_boxplot(notch = TRUE) +
+  plot_theme +
+  xlab("Participant-wise performance [% correct]") +
+  scale_fill_manual(values=c("black", "#858382")) +
+  ylab("Performance") + 
+  ylim(-0.01, 1.01)
+```
+
+### 4.5.4. Statistical comparison
+##### Anderson-Darling test for normality
+```{r}
+ad.test(participant_data$mean_response)
+ad.test(participant_data$mean_response[participant_data$experience=="yes"])
+ad.test(participant_data$mean_response[participant_data$experience=="no"])
+```
+RESULTS: The distribution of the data differs highly significantly from a normal distribution.
+
+##### Inferential statistics: Wilcoxon rank sum test
+```{r}
+med_perf_e <- median(participant_data$mean_response[participant_data$experience == "yes"])
+med_perf_n <- median(participant_data$mean_response[participant_data$experience == "no"])
+c(med_perf_e, med_perf_n)
+                    
+
+wilcox.test(participant_data$mean_response[participant_data$experience == "yes"],
+            participant_data$mean_response[participant_data$experience == "no"], paired=FALSE)
+```
+RESULTS: Participant-wise performance differs statistically significantly between naive and expert participants.
+
+# 5. Analysis of response times
+## 5.1. Remove images without response
+as there is no associated response time to work with
+```{r}
+nrow(imageClassificationDataLong)
+imageClassificationDataLong_2 <- imageClassificationDataLong %>% drop_na(time)
+nrow(imageClassificationDataLong_2)
+```
+
+## 5.2. Sanity checks
+### 5.2.1. Check effect of presentation order on response time
+```{r}
+bp_order_time <- ggplot(imageClassificationDataLong_2, aes(y=time, x=as.factor(stimNo), fill=generation)) +
+  geom_violin() +
+  stat_summary(fun="median") +
+  ylim(0,30) +
+  xlab("Stimulus number during presentation") +
+  ylab("Response time distribution and median [s]")
+
+bp_order_time
+```
+
+INTERPRETATION: There is a clear, effect of stimulus presentation order on response times. This results in a higher response time in particular for the first two images presented, which are both artificial images. Thus do not include image category as an factor for analysis of response times.
+
+NOTE:  The 371 dropped values in this in subsequent plots are those response times > 30s, which do not get plotted due to the imposed axis limit:
+```{r}
+sum(imageClassificationDataLong_2$time>30)
+```
+
+However, these 'outliers' are still included in all statistical analyses. 
+
+### 5.2.2. Effect of presentation order on classification correctness
+
+##### Overview
+```{r}
+bp_order_response <- ggplot(imageClassificationDataLong_2, aes(y=response_i, x=as.factor(stimNo), color=generation)) +
+  stat_summary(fun.data = "mean_cl_boot") +
+  xlab("Stimulus number during presentation") +
+  ylab("Response correctness mean + CI [s]")
+
+bp_order_response
+```
+
+##### Correlation
+```{r}
+dataCastByStimNo <- dcast(imageClassificationDataLong_2, stimNo ~ response, length)
+
+dataCastByStimNo$pCorrect <- dataCastByStimNo$correct / (dataCastByStimNo$correct + dataCastByStimNo$incorrect)
+
+ggscatter(dataCastByStimNo, x = "stimNo", y = "pCorrect",
+          add = "reg.line", conf.int = TRUE,
+          add.params = list(color = "blue", fill = "lightgray"))+
+  stat_cor(method = "pearson")
+
+# Note: if calculated separately by participant group the conclusion holds true as well:
+# Naives: R = 0.28, p = 0.29
+# Experts: R = 0.21, p = 0.43
+# dataCastByStimNo <- dcast(imageClassificationDataLong_2, 
+#                           stimNo ~ response + Image_seen_before, 
+#                           length)
+```
+
+INTERPRETATION: There is no relevant effect of stimulus presentation order on classification correctness.
+
+## 5.3. Statistical analysis of effects on response times
+
+### 5.3.1. Anderson-Darling test for normality
+```{r}
+ad.test(imageClassificationDataLong_2$time)
+```
+
+The data are non-normally distributed. The same is true when testing for distribution of subpopulations (see below.) Thus use the Scheirer-Ray-Hare test as non-parametric alternative to an ANOVA.
+
+### 5.3.2. Further considerations
+* Age is different between experienced and controls, thus not independent of prior experience
+* Gender composition is different between experienced and controls, thus not independent of prior experience
+* The effect of image category depends on the stimulus presentation order
+
+CONCLUSION: Only analyse effect of prior experience and response correctness on response time.
+
+### 5.3.3. Scheirer-Ray-Hare test
+as non-parametric alternative to ANOVA
+```{r}
+lm <- scheirerRayHare(time ~ Image_seen_before*response, data=imageClassificationDataLong_2)
+```
+
+```{r}
+lm
+```
+
+```{r}
+summary(lm)
+```
+
+### 5.3.4. Pair-wise post hoc comparisons
+
+#### 5.3.4.1. Effect of classification correctness
+
+##### Plot CDF: Full response times
+```{r}
+ggplot(imageClassificationDataLong_2, aes(color=response, x=time)) +
+  stat_ecdf(size=.75) +
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_color_manual(values = c("#03c7ff", "#fc7303")) +
+  plot_theme
+```
+
+INTERPRETATION: Very long tail - very likely cases in which participants just left browser window open, did something else and returned to study at at some later point.
+
+##### Plot CDF: First 30 seconds
+```{r}
+ggplot(imageClassificationDataLong_2, aes(color=response, x=time)) +
+  stat_ecdf(size=.75) +
+  xlim(0,30) +
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_color_manual(values = c("#03c7ff", "#fc7303")) +
+  plot_theme
+```
+
+##### Anderson-Darling test for normality
+```{r}
+ad.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="correct"])
+ad.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="incorrect"])
+```
+RESULTS: The distribution of the data differs significantly from a normal distribution.
+
+##### Wilcoxon rank sum test
+```{r}
+wilcox.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="correct"],
+       imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="incorrect"], paired=FALSE)
+```
+
+##### Median response time difference
+```{r}
+m_c <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="correct"])
+m_i <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$response=="incorrect"])
+c(m_c, m_i)
+```
+
+#### 5.3.4.2. Effect of prior experience
+
+##### Plot CDF: Full response times
+```{r}
+ggplot(imageClassificationDataLong_2, aes(linetype=Image_seen_before, x=time)) +
+  stat_ecdf(size=.75) +
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_linetype_manual(values=c("longdash", "solid"))+
+  plot_theme
+```
+
+##### Plot CDF: First 30 seconds
+```{r}
+ggplot(imageClassificationDataLong_2, aes(linetype=Image_seen_before, x=time, color=Image_seen_before)) +
+  stat_ecdf(size=.75) +
+  xlim(0,30) +
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_linetype_manual(values=c("longdash", "solid"))+
+  scale_color_manual(values=c("black", "#858382")) +
+  plot_theme
+```
+
+##### Anderson-Darling test for normality
+```{r}
+ad.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="yes"])
+ad.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="no"])
+```
+
+RESULTS: The distribution of the data differs significantly from a normal distribution.
+
+##### Wilcoxon rank sum test
+```{r}
+wilcox.test(imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="yes"],
+            imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="no"], paired=FALSE)
+```
+
+##### Median response time difference
+```{r}
+m_e <-median (imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="yes"])
+m_n <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$Image_seen_before=="no"])
+c(m_n, m_e)
+```
+
+#### 5.3.4.3. Combined effect: Prior experience <> classification correctness
+
+##### Format data
+```{r}
+imageClassificationDataLong_2 <- imageClassificationDataLong_2 %>%
+  mutate(
+    plotGroup = case_when(
+      response == "correct" & Image_seen_before == "no" ~ "naive, correct answer",
+      response == "incorrect" & Image_seen_before == "no" ~ "naive, incorrect answer",
+      response == "correct" & Image_seen_before == "yes" ~ "expert, correct answer",
+      response == "incorrect" & Image_seen_before == "yes" ~ "expert, incorrect answer",
+    )
+  )
+```
+
+##### Plot CDF: First 30 seconds
+```{r}
+ggplot(imageClassificationDataLong_2, aes(color=plotGroup, x=time)) +
+  stat_ecdf(size=.75, aes(linetype = plotGroup)) +
+  xlim(0,30)+
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_color_manual(values = c("#02e1fa", "#fca503","#0690c2", "#ff8800")) +
+  scale_linetype_manual(values=c("solid", "solid", "longdash", "longdash"))+
+  plot_theme
+```
+
+##### Wilcoxon rank sum test with Bonferroni correction
+```{r}
+# data
+group1 <- imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "naive, correct answer"]
+group2 <- imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "naive, incorrect answer"]
+group3 <- imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "expert, correct answer"]
+group4 <- imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "expert, incorrect answer"]
+
+# un-paired t-test
+p1 <- wilcox.test(group1, group2, paired=FALSE)
+p2 <- wilcox.test(group1, group3, paired=FALSE)
+p3 <- wilcox.test(group1, group4, paired=FALSE)
+p4 <- wilcox.test(group2, group3, paired=FALSE)
+p5 <- wilcox.test(group2, group4, paired=FALSE)
+p6 <- wilcox.test(group3, group4, paired=FALSE)
+
+# bonferroni
+p_vals <- c(p1$p.value, p2$p.value, p3$p.value, p4$p.value, p5$p.value, p6$p.value)
+p_adj <- p_vals * length(p_vals)
+p_adj[p_adj > 1] <- 1
+p_adj
+```
+
+##### Median response time difference
+```{r}
+# data
+m1 <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "naive, correct answer"])
+m2 <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "naive, incorrect answer"])
+m3 <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "expert, correct answer"])
+m4 <- median(imageClassificationDataLong_2$time[imageClassificationDataLong_2$plotGroup == "expert, incorrect answer"])
+
+median_times <- c(m1, m2, m3, m4)
+median_times
+```
+
+#### 5.3.4.4. Within-participant pair-wise response time comparison
+
+##### Format data
+Within-participant pair wise comparison of average response times for correct and incorrect classifications in order to control for the possibility that people who are less well able to distinguish between image categories are slower.
+```{r}
+# preallocate
+pairwise_data_length <- length(unique(imageClassificationDataLong_2$ID)) *
+                     length(unique(imageClassificationDataLong_2$response))
+pairwise_data <- data.frame(no=rep(NA,pairwise_data_length),
+                          id=rep(NA,pairwise_data_length),
+                          experience=rep(NA,pairwise_data_length),
+                          response=rep(NA,pairwise_data_length),
+                          time_mean=rep(NA,pairwise_data_length))
+
+
+counter = 1
+for(x in unique(imageClassificationDataLong_2$ID)){
+    for(y in unique(imageClassificationDataLong_2$response)){
+      tmp_data <- imageClassificationDataLong_2 %>% subset(ID == x & response == y)
+      pairwise_data$no[counter] <- counter
+      pairwise_data$id[counter] <- tmp_data$ID[1]
+      pairwise_data$experience[counter] <- tmp_data$Image_seen_before[1]
+      pairwise_data$response[counter] <- tmp_data$response[1]
+      pairwise_data$time_mean[counter] <- tmp_data$time %>% mean
+      counter = counter + 1
+  }
+}
+```
+
+Find non-paired mean values
+```{r}
+# missing mean times
+na_ind <- which(is.na(pairwise_data$time_mean))
+
+# add odd inds for even ones & vice versa
+na_ind_addOdd <- na_ind[which(na_ind %% 2 == 0)] - 1
+na_ind_addEven <- na_ind[which(na_ind %% 2 != 0)] + 1
+na_ind_all <- c(na_ind, na_ind_addOdd, na_ind_addEven)
+na_ind_all <- sort(setdiff(na_ind_all, na_ind_all[duplicated(na_ind_all)]))   # unique IDs after exclusion
+
+# non-paired vs. paired data
+nonpaired_data <- pairwise_data[na_ind_all,] # correct answers only
+paired_data <- pairwise_data[-na_ind_all,]   # correct and incorrect answers
+```
+
+Participants excluded from pairwise comparison due to all responses correct
+```{r}
+# entry #s
+na_ind_all
+# n participant (2 entries / participant)
+length(na_ind_all)/2
+
+# by experience
+tbl_all_corrrect <- table(nonpaired_data$experience[nonpaired_data$response=="correct"])
+tbl_all_corrrect
+```
+NOTE: There are no naive participants who classify all images correctly.
+
+##### Excursion: Enrichment statistics of experts classifying all images correctly (exact binomial test)
+```{r}
+# average chance of success for experts
+p_expert <- mean(imageClassificationDataLong_2$response_i[imageClassificationDataLong_2$Image_seen_before=="yes"])
+
+# probability to get all 16 images correct assuming average expert success rate
+prob_all_correct <- p_expert^16
+
+# number of experts with 16 (=100%) successes
+e_all_correct <- tbl_all_corrrect[1]
+
+# binomial test
+binom.test(e_all_correct,
+           n_expert,
+           p=prob_all_correct)
+
+# enrichment ratio
+ExpectVal <- prob_all_correct * n_expert
+ER <- 10/ExpectVal
+ER
+```
+A total of 10 (expert) participants answered all questions correctly. This performance is way above chance.
+
+##### Plot CDF: First 30 seconds
+```{r}
+ggplot(paired_data, aes(x=time_mean, color=response)) +
+  stat_ecdf(size=0.75)  +
+  xlab("Response Time [s]") +
+  ylab("CDF") +
+  scale_color_manual(values = c("#03c7ff", "#fc7303")) +
+  plot_theme +
+  xlim(0,30)
+```
+
+##### Plot boxplot: First 30 seconds
+```{r}
+ggplot(paired_data, aes(y=time_mean, fill=response)) +
+  geom_boxplot(notch=TRUE)  +
+  ylab("Response Time [s]") +
+  scale_fill_manual(values = c("#03c7ff", "#fc7303")) +
+  plot_theme +
+  ylim(0,30)
+```
+
+##### Anderson-Darling test for normality
+```{r}
+ad.test(paired_data$time_mean)
+ad.test(paired_data$time_mean[paired_data$response == "correct"])
+ad.test(paired_data$time_mean[paired_data$response == "incorrect"])
+
+```
+
+##### Wilcoxon singed rank test
+```{r}
+wilcox.test(paired_data$time_mean[paired_data$response == "correct"],
+            paired_data$time_mean[paired_data$response == "incorrect"], paired=TRUE)
+```
+
+##### Median response time difference
+```{r}
+m_c_p <- median(paired_data$time_mean[paired_data$response == "correct"])
+m_i_p <- median(paired_data$time_mean[paired_data$response == "incorrect"])
+c(m_c_p, m_i_p)
+```
